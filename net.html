@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lab: Manage Network Security</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      line-height: 1.5;
+      margin: 20px;
+      background-color: #f9f9f9;
+      color: #222;
+    }
+    h1, h2, h3 {
+      color: #0056b3;
+    }
+    pre {
+      background-color: #eee;
+      padding: 10px;
+      overflow-x: auto;
+      border-radius: 5px;
+    }
+    code {
+      background-color: #ddd;
+      padding: 2px 4px;
+      border-radius: 3px;
+    }
+    section {
+      margin-bottom: 30px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Lab: Manage Network Security</h1>
+
+  <section>
+    <h2>Outcomes</h2>
+    <ul>
+      <li>Configure firewall and SELinux settings on a web server host.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Preparation</h2>
+    <p>As the student user on the workstation machine, use the lab command to prepare your system:</p>
+    <pre>[student@workstation ~]$ lab start netsecurity-review</pre>
+  </section>
+
+  <section>
+    <h2>Instructions</h2>
+    <p>The company is running a web application on ports <code>80/TCP</code> and <code>1001/TCP</code>. All changes must persist across reboots. The <code>5900/TCP</code> port must remain available for the graphical interface.</p>
+
+    <h3>Step 1: Test Web Servers</h3>
+    <pre>[student@workstation ~]$ curl http://serverb.lab.example.com
+curl: (7) Failed to connect to serverb.lab.example.com port 80: Connection refused
+
+[student@workstation ~]$ curl http://serverb.lab.example.com:1001
+curl: (7) Failed to connect to serverb.lab.example.com port 1001: No route to host</pre>
+
+    <h3>Step 2: Log in to Serverb</h3>
+    <pre>[student@workstation ~]$ ssh student@serverb
+[student@serverb ~]$ sudo -i</pre>
+
+    <h3>Step 3: Check httpd service</h3>
+    <pre>[root@serverb ~]# systemctl is-active httpd
+inactive
+[root@serverb ~]# sudo systemctl enable --now httpd
+...fails...
+[root@serverb ~]# systemctl status httpd.service
+...output omitted...
+Permission denied on port 1001</pre>
+
+    <h3>Step 4: Configure SELinux</h3>
+    <pre>[root@serverb ~]# sudo semanage port -a -t http_port_t -p tcp 1001
+[root@serverb ~]# sudo semanage port -l | grep '^http_port_t'
+http_port_t            tcp      1001, 80, 81, 443, 488, 8008, 8009, 8443, 9000</pre>
+
+    <h3>Step 5: Enable and Start httpd</h3>
+    <pre>[root@serverb ~]# sudo systemctl enable --now httpd
+[root@serverb ~]# systemctl is-active httpd
+active
+[root@serverb ~]# systemctl is-enabled httpd
+enabled</pre>
+
+    <h3>Step 6: Configure Firewall</h3>
+    <pre>[root@serverb ~]# sudo firewall-cmd --get-default-zone
+public
+[root@serverb ~]# sudo firewall-cmd --permanent --zone=public --add-port=1001/tcp
+success
+[root@serverb ~]# sudo firewall-cmd --reload
+success
+[root@serverb ~]# sudo firewall-cmd --zone=public --list-all
+public
+  services: cockpit dhcpv6-client http ssh
+  ports: 1001/tcp</pre>
+
+    <h3>Step 7: Test Web Servers Again</h3>
+    <pre>[student@workstation ~]$ curl http://serverb.lab.example.com
+SERVER B
+[student@workstation ~]$ curl http://serverb.lab.example.com:1001
+VHOST 1</pre>
+  </section>
+
+  <section>
+    <h2>Evaluation</h2>
+    <pre>[student@workstation ~]$ lab grade netsecurity-review
+Finish
+[student@workstation ~]$ lab finish netsecurity-review</pre>
+  </section>
+</body>
+</html>
