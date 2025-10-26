@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Linux LVM Storage Management Lab</title>
+  <style>
+    body {
+      font-family: "Fira Code", monospace;
+      background: #121212;
+      color: #e0e0e0;
+      line-height: 1.6;
+      padding: 2rem;
+    }
+    h1, h2, h3 {
+      color: #00bcd4;
+      border-bottom: 1px solid #333;
+      padding-bottom: 0.2em;
+    }
+    pre {
+      background: #1e1e1e;
+      padding: 1rem;
+      border-radius: 8px;
+      overflow-x: auto;
+      color: #c3e88d;
+    }
+    code {
+      background: #272727;
+      padding: 2px 4px;
+      border-radius: 4px;
+      color: #ffcc80;
+    }
+    details {
+      background: #1a1a1a;
+      margin-bottom: 1em;
+      padding: 1em;
+      border-left: 4px solid #00bcd4;
+      border-radius: 6px;
+    }
+    summary {
+      font-weight: bold;
+      cursor: pointer;
+      color: #80cbc4;
+    }
+    .note {
+      background: #263238;
+      padding: 0.8rem;
+      border-left: 4px solid #ffab40;
+      margin: 1rem 0;
+    }
+  </style>
+</head>
+<body>
+
+<h1>Lab: Manage Storage Stack</h1>
+<p>
+Resize an existing logical volume, add LVM resources as necessary, and then add a new logical volume with a persistently mounted XFS file system on it.
+</p>
+
+<h2>Outcomes</h2>
+<ul>
+  <li>Resize <code>serverb_01_lv</code> logical volume to <strong>768 MiB</strong>.</li>
+  <li>Create <code>serverb_02_lv</code> logical volume (128 MiB, XFS).</li>
+  <li>Mount persistently on <code>/storage/data2</code>.</li>
+</ul>
+
+<h2>Preparation</h2>
+<pre>[student@workstation ~]$ lab start lvm-review</pre>
+
+<h2>Instructions</h2>
+
+<details open>
+  <summary>1️⃣ Extend existing logical volume</summary>
+  <div>
+    On <code>serverb</code>, extend <code>serverb_01_lv</code> to 768 MiB. If volume group lacks space, add new partition.
+    <br><br>
+
+    <pre>
+[root@serverb ~]# parted /dev/vdb unit MiB print
+
+Number  Start    End     Size    File system  Name     Flags
+1       1.00MiB  513MiB  512MiB               primary
+    </pre>
+
+    Create and flag LVM partition:
+    <pre>
+[root@serverb ~]# parted /dev/vdb mkpart primary 513MiB 1026MiB
+[root@serverb ~]# parted /dev/vdb set 2 lvm on
+[root@serverb ~]# udevadm settle
+    </pre>
+
+    Initialize and extend:
+    <pre>
+[root@serverb ~]# pvcreate /dev/vdb2
+[root@serverb ~]# vgextend serverb_01_vg /dev/vdb2
+[root@serverb ~]# lvextend -L 768M /dev/serverb_01_vg/serverb_01_lv
+[root@serverb ~]# xfs_growfs /storage/data1
+    </pre>
+
+    <div class="note">💡 Alternative: <code>lvextend -r -L 768M ...</code> auto-resizes filesystem too.</div>
+  </div>
+</details>
+
+<details>
+  <summary>2️⃣ Create new logical volume and mount</summary>
+  <div>
+    Create 128 MiB LV and mount persistently.
+    <pre>
+[root@serverb ~]# lvcreate -n serverb_02_lv -L 128M serverb_01_vg
+[root@serverb ~]# mkfs -t xfs /dev/serverb_01_vg/serverb_02_lv
+[root@serverb ~]# mkdir /storage/data2
+    </pre>
+
+    Add to <code>/etc/fstab</code>:
+    <pre>
+/dev/serverb_01_vg/serverb_02_lv  /storage/data2  xfs  defaults  0  0
+    </pre>
+
+    Reload and mount:
+    <pre>
+[root@serverb ~]# systemctl daemon-reload
+[root@serverb ~]# mount /storage/data2
+    </pre>
+  </div>
+</details>
+
+<details>
+  <summary>3️⃣ Verify sizes and mount points</summary>
+  <pre>
+[root@serverb ~]# df -h /storage/data1
+/dev/mapper/serverb_01_vg-serverb_01_lv  763M   19M  744M   3% /storage/data1
+
+[root@serverb ~]# df -h /storage/data2
+/dev/mapper/serverb_01_vg-serverb_02_lv  123M  7.6M  116M   7% /storage/data2
+  </pre>
+</details>
+
+<details>
+  <summary>4️⃣ Verify LV details</summary>
+  <pre>
+[root@serverb ~]# lvdisplay /dev/serverb_01_vg/serverb_01_lv
+[root@serverb ~]# lvdisplay /dev/serverb_01_vg/serverb_02_lv
+  </pre>
+</details>
+
+<h2>Evaluation</h2>
+<pre>[student@workstation ~]$ lab grade lvm-review</pre>
+
+<h2>Finish</h2>
+<pre>[student@workstation ~]$ lab finish lvm-review</pre>
+
+<div class="note">
+  ✅ <strong>Tip:</strong> During the exam, focus on the flow:
+  <br> → <code>fdisk/parted</code> → <code>pvcreate</code> → <code>vgextend</code> → <code>lvextend</code> → <code>mkfs</code> → <code>mount</code> → verify.
+</div>
+
+</body>
+</html>
