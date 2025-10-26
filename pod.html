@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lab: Run Containers</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      line-height: 1.5;
+      margin: 20px;
+      background-color: #f9f9f9;
+      color: #222;
+    }
+    h1, h2, h3 {
+      color: #0056b3;
+    }
+    pre {
+      background-color: #eee;
+      padding: 10px;
+      overflow-x: auto;
+      border-radius: 5px;
+    }
+    code {
+      background-color: #ddd;
+      padding: 2px 4px;
+      border-radius: 3px;
+    }
+    section {
+      margin-bottom: 30px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Lab: Run Containers</h1>
+
+  <section>
+    <h2>Outcomes</h2>
+    <ul>
+      <li>Create rootless detached containers.</li>
+      <li>Configure a container image registry and create a container from an existing image.</li>
+      <li>Configure port mapping and persistent storage.</li>
+      <li>Configure a container as a systemd service and manage it with <code>systemctl</code>.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Preparation</h2>
+    <p>As the student user on the workstation machine, prepare your system:</p>
+    <pre>[student@workstation ~]$ lab start containers-review</pre>
+  </section>
+
+  <section>
+    <h2>Instructions</h2>
+    <h3>Step 1: Log in to Serverb and create podsvc user</h3>
+    <pre>[student@workstation ~]$ ssh student@serverb
+...output omitted...
+[root@serverb ~]# sudo useradd podsvc
+[root@serverb ~]# sudo passwd podsvc
+New password: redhat
+Retype new password: redhat</pre>
+
+    <h3>Step 2: Log in as podsvc and configure registry</h3>
+    <pre>[student@workstation ~]$ ssh podsvc@serverb
+[podsvc@serverb ~]$ mkdir -p ~/.config/containers
+[podsvc@serverb ~]$ echo "unqualified-search-registries = ['registry.lab.example.com']
+
+[[registry]]
+location = 'registry.lab.example.com'
+insecure = true
+blocked = false" > ~/.config/containers/registries.conf
+[podsvc@serverb ~]$ podman login registry.lab.example.com
+Username: admin
+Password: redhat321
+Login Succeeded!</pre>
+
+    <h3>Step 3: Prepare persistent storage</h3>
+    <pre>[podsvc@serverb ~]$ mkdir -p ~/webserver/html/
+[podsvc@serverb ~]$ echo "Welcome to the webserver container" > ~/webserver/html/index.html
+[podsvc@serverb ~]$ ls -ld ~/webserver/html/
+drwxr-xr-x. 2 podsvc podsvc ...
+[podsvc@serverb ~]$ ls -l ~/webserver/html/index.html
+-rw-r--r--. 1 podsvc podsvc ...</pre>
+
+    <h3>Step 4: Run the container</h3>
+    <pre>[podsvc@serverb ~]$ podman run -d --name webserver -p 8080:8080 \
+-v ~/webserver:/var/www:Z registry.lab.example.com/rhel9/httpd-24
+[podsvc@serverb ~]$ podman ps
+...container running...
+[podsvc@serverb ~]$ curl http://localhost:8080
+Welcome to the webserver container</pre>
+
+    <h3>Step 5: Configure systemd service</h3>
+    <pre>[podsvc@serverb ~]$ mkdir -p ~/.config/systemd/user/
+[podsvc@serverb ~]$ cd ~/.config/systemd/user
+[podsvc@serverb user]$ podman generate systemd --new --files --name webserver
+[podsvc@serverb user]$ podman stop webserver
+[podsvc@serverb user]$ podman rm webserver
+[podsvc@serverb user]$ systemctl --user daemon-reload
+[podsvc@serverb user]$ systemctl --user enable --now container-webserver
+[podsvc@serverb user]$ podman ps
+...webserver running...</pre>
+
+    <h3>Step 6: Enable linger for podsvc user</h3>
+    <pre>[podsvc@serverb user]$ loginctl enable-linger
+[podsvc@serverb user]$ loginctl show-user podsvc
+...Linger=yes...</pre>
+
+    <h3>Step 7: Test web service</h3>
+    <pre>[podsvc@serverb user]$ curl http://localhost:8080
+Welcome to the webserver container</pre>
+  </section>
+
+  <section>
+    <h2>Evaluation</h2>
+    <pre>[student@workstation ~]$ lab grade containers-review
+Finish
+[student@workstation ~]$ lab finish containers-review</pre>
+  </section>
+</body>
+</html>
