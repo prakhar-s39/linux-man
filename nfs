@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lab: Access Network-Attached Storage</title>
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      line-height: 1.6;
+      margin: 0;
+      padding: 0;
+      background: #f8f9fa;
+      color: #212529;
+    }
+    header {
+      background: #0d6efd;
+      color: white;
+      padding: 1rem 2rem;
+    }
+    main {
+      max-width: 900px;
+      margin: auto;
+      background: white;
+      padding: 2rem;
+      border-radius: 12px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+    }
+    h1, h2, h3 {
+      color: #0d6efd;
+    }
+    pre {
+      background: #212529;
+      color: #f8f9fa;
+      padding: 1rem;
+      border-radius: 8px;
+      overflow-x: auto;
+    }
+    code {
+      background: #e9ecef;
+      padding: 2px 4px;
+      border-radius: 4px;
+      font-family: monospace;
+    }
+    .note {
+      background: #fff3cd;
+      border-left: 4px solid #ffc107;
+      padding: 0.75rem;
+      border-radius: 8px;
+      margin: 1rem 0;
+    }
+    nav {
+      margin-bottom: 2rem;
+      font-size: 0.9rem;
+    }
+    nav a {
+      color: #0d6efd;
+      text-decoration: none;
+      margin-right: 1rem;
+    }
+    nav a:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Lab: Access Network-Attached Storage</h1>
+  </header>
+  <main>
+    <nav>
+      <a href="index.html">&larr; Back to LVM Lab</a>
+    </nav>
+
+    <h2>Objective</h2>
+    <p>Configure the automounter with an indirect map, using exports from an NFSv4 server.</p>
+
+    <h2>Outcomes</h2>
+    <ul>
+      <li>Install required packages to set up the automounter.</li>
+      <li>Configure an automounter indirect map with NFSv4 resources.</li>
+    </ul>
+
+    <h2>Preparation</h2>
+    <pre><code>[student@workstation ~]$ lab start netstorage-review</code></pre>
+
+    <h2>Environment Overview</h2>
+    <ul>
+      <li><code>serverb</code> shares <code>/shares</code> containing <code>management</code>, <code>production</code>, and <code>operation</code>.</li>
+      <li><code>servera</code> must automount them under <code>/remote</code>.</li>
+      <li>Groups and users have specific read/write permissions for each export.</li>
+      <li>All user passwords: <code>redhat</code></li>
+    </ul>
+
+    <h2>Step 1: Log in and Install Packages</h2>
+    <pre><code>[student@workstation ~]$ ssh student@servera
+[student@servera ~]$ sudo -i
+[root@servera ~]# dnf install autofs
+Is this ok [y/N]: y
+Complete!</code></pre>
+
+    <h2>Step 2: Test NFS Access</h2>
+    <pre><code>[root@servera ~]# mount -t nfs serverb.lab.example.com:/shares /mnt
+[root@servera ~]# ls -l /mnt
+drwxrwx---. 2 root managers   25 Apr  4 01:13 management
+drwxrwx---. 2 root operators  25 Apr  4 01:13 operation
+drwxrwx---. 2 root production 25 Apr  4 01:13 production
+[root@servera ~]# umount /mnt</code></pre>
+
+    <h2>Step 3: Configure Automounter</h2>
+    <pre><code># Master map
+[root@servera ~]# vi /etc/auto.master.d/shares.autofs
+/remote  /etc/auto.shares
+
+# Indirect map
+[root@servera ~]# vi /etc/auto.shares
+* -rw,sync,fstype=nfs4 serverb.lab.example.com:/shares/&
+</code></pre>
+
+    <h2>Step 4: Start & Enable autofs</h2>
+    <pre><code>[root@servera ~]# systemctl enable --now autofs
+Created symlink /etc/systemd/system/multi-user.target.wants/autofs.service → /usr/lib/systemd/system/autofs.service.</code></pre>
+
+    <h2>Step 5: Verify Automount</h2>
+    <p>Test as different users to ensure correct NFS permissions.</p>
+
+    <h3>Manager Test</h3>
+    <pre><code>[root@servera ~]# su - manager1
+[manager1@servera ~]$ ls /remote/management
+Welcome.txt
+[manager1@servera ~]$ echo TEST1 > /remote/management/Test.txt
+[manager1@servera ~]$ cat /remote/management/Test.txt
+TEST1
+</code></pre>
+
+    <h3>DB User Test</h3>
+    <pre><code>[root@servera ~]# su - dbuser1
+[dbuser1@servera ~]$ ls /remote/production
+Welcome.txt
+[dbuser1@servera ~]$ echo TEST2 > /remote/production/Test.txt
+[dbuser1@servera ~]$ cat /remote/production/Test.txt
+TEST2
+</code></pre>
+
+    <h3>Contractor Test</h3>
+    <pre><code>[root@servera ~]# su - contractor1
+[contractor1@servera ~]$ ls /remote/operation
+Welcome.txt
+[contractor1@servera ~]$ echo TEST3 > /remote/operation/Test.txt
+[contractor1@servera ~]$ cat /remote/operation/Test.txt
+TEST3
+</code></pre>
+
+    <h2>Step 6: Check Mounted Exports</h2>
+    <pre><code>[root@servera ~]# mount | grep nfs
+serverb.lab.example.com:/shares/management on /remote/management type nfs4 (...)
+serverb.lab.example.com:/shares/operation on /remote/operation type nfs4 (...)
+serverb.lab.example.com:/shares/production on /remote/production type nfs4 (...)
+</code></pre>
+
+    <h2>Step 7: Evaluation & Finish</h2>
+    <pre><code>[student@workstation ~]$ lab grade netstorage-review
+[student@workstation ~]$ lab finish netstorage-review</code></pre>
+
+    <nav style="margin-top:2rem;">
+      <a href="index.html">&larr; Back to LVM Lab</a>
+    </nav>
+  </main>
+</body>
+</html>
